@@ -1,0 +1,882 @@
+
+# ==How do you handle exceptions in Spring Boot using @ExceptionHandler?  Create and Handle custom exceptions ? Multiple Exception Handlers ?
+
+
+## Exception handling using `@ExceptionHandler`
+
+`@ExceptionHandler` is used to handle exceptions thrown from a controller method.
+
+### Example
+
+```
+@RestController
+@RequestMapping("/users")
+public class UserController {
+
+    @GetMapping("/{id}")
+    public String getUser(@PathVariable int id) {
+
+        if (id <= 0) {
+            throw new IllegalArgumentException("User id must be positive");
+        }
+
+        return "User found";
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<String> handleIllegalArgument(IllegalArgumentException ex) {
+        return ResponseEntity
+                .badRequest()
+                .body(ex.getMessage());
+    }
+}
+```
+
+### How it works
+
+If `/users/-1` is called:
+
+```
+throw new IllegalArgumentException("User id must be positive");
+```
+
+Spring checks:
+
+> Is there any `@ExceptionHandler` method that can handle `IllegalArgumentException`?
+
+It finds:
+
+```
+@ExceptionHandler(IllegalArgumentException.class)
+```
+
+Then it returns:
+
+```
+User id must be positive
+```
+
+with HTTP status:
+
+```
+400 Bad Request
+```
+
+This handler works only inside this controller.
+
+---
+
+## Create and handle custom exception
+
+Custom exceptions are used when built-in exceptions are not meaningful enough.
+
+Example:
+
+```
+public class UserNotFoundException extends RuntimeException {
+
+    public UserNotFoundException(String message) {
+        super(message);
+    }
+}
+```
+
+Now use it in controller/service:
+
+```
+@RestController
+@RequestMapping("/users")
+public class UserController {
+
+    @GetMapping("/{id}")
+    public String getUser(@PathVariable int id) {
+
+        if (id == 100) {
+            throw new UserNotFoundException("User not found with id: " + id);
+        }
+
+        return "User found";
+    }
+
+    @ExceptionHandler(UserNotFoundException.class)
+    public ResponseEntity<String> handleUserNotFound(UserNotFoundException ex) {
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body(ex.getMessage());
+    }
+}
+```
+
+### Output
+
+Request:
+
+```
+GET /users/100
+```
+
+Response:
+
+```
+User not found with id: 100
+```
+
+Status:
+
+```
+404 Not Found
+```
+
+### Why custom exception is useful?
+
+Instead of writing:
+
+```
+throw new RuntimeException("User not found");
+```
+
+we write:
+
+```
+throw new UserNotFoundException("User not found");
+```
+
+This makes the error clear, meaningful, and easy to handle separately.
+
+---
+
+## Multiple Exception Handlers
+
+You can create multiple `@ExceptionHandler` methods for different exceptions.
+
+```
+@RestController
+@RequestMapping("/users")
+public class UserController {
+
+    @GetMapping("/{id}")
+    public String getUser(@PathVariable int id) {
+
+        if (id <= 0) {
+            throw new IllegalArgumentException("Id must be positive");
+        }
+
+        if (id == 100) {
+            throw new UserNotFoundException("User not found with id: " + id);
+        }
+
+        return "User found";
+    }
+
+    @ExceptionHandler(UserNotFoundException.class)
+    public ResponseEntity<String> handleUserNotFound(UserNotFoundException ex) {
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body(ex.getMessage());
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<String> handleIllegalArgument(IllegalArgumentException ex) {
+        return ResponseEntity
+                .badRequest()
+                .body(ex.getMessage());
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<String> handleGenericException(Exception ex) {
+        return ResponseEntity
+                .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body("Something went wrong");
+    }
+}
+```
+
+### How Spring chooses handler?
+
+Spring selects the most specific matching handler.
+
+For example:
+
+#### Case 1
+
+```
+throw new UserNotFoundException("User not found");
+```
+
+Spring calls:
+
+```
+handleUserNotFound()
+```
+
+Status:
+
+```
+404 Not Found
+```
+
+---
+
+#### Case 2
+
+```
+throw new IllegalArgumentException("Invalid input");
+```
+
+Spring calls:
+
+```
+handleIllegalArgument()
+```
+
+Status:
+
+```
+400 Bad Request
+```
+
+---
+
+#### Case 3
+
+Some unknown exception happens:
+
+```
+throw new NullPointerException();
+```
+
+Spring calls:
+
+```
+handleGenericException()
+```
+
+Status:
+
+```
+500 Internal Server Error
+```
+
+---
+
+## Interview Answer
+
+>In Spring Boot, we handle exceptions using `@ExceptionHandler`. It is used to define a method that handles a specific exception type thrown from controller methods.
+
+>For custom errors, we create our own exception class by extending `RuntimeException`, such as `UserNotFoundException`. Then we write an `@ExceptionHandler` method for that exception and return a proper HTTP status like `404 Not Found`.
+
+>We can also define multiple exception handlers for different exceptions. Spring automatically chooses the most specific handler. For example, `UserNotFoundException` will go to its own handler, `IllegalArgumentException` will go to its own handler, and unknown exceptions can be handled by a generic `Exception.class` handler.
+
+
+#
+-----
+-----
+----
+
+# ==What is @ControllerAdvice and @RestControllerAdvice ? explain it properly. what is local and global exception ?
+
+This is one of the most common Spring Boot interview questions.
+
+---
+
+## Local Exception Handling
+
+Suppose you have 10 controllers.
+
+```
+UserController
+ProductController
+OrderController
+PaymentController
+...
+```
+
+If every controller contains:
+
+```
+@ExceptionHandler(UserNotFoundException.class)
+public ResponseEntity<String> handleUserNotFound(...) {
+    ...
+}
+```
+
+```
+@ExceptionHandler(Exception.class)
+public ResponseEntity<String> handleException(...) {
+    ...
+}
+```
+
+then you are repeating the same code everywhere.
+
+This is called **Local Exception Handling** because the exception handler exists inside a specific controller.
+
+Example:
+
+```
+@RestController
+@RequestMapping("/users")
+public class UserController {
+
+    @GetMapping("/{id}")
+    public String getUser(@PathVariable Long id) {
+
+        throw new UserNotFoundException("User not found");
+    }
+
+    @ExceptionHandler(UserNotFoundException.class)
+    public ResponseEntity<String> handleUserNotFound(
+            UserNotFoundException ex) {
+
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body(ex.getMessage());
+    }
+}
+```
+
+This handler works only for `UserController`.
+
+---
+
+## Problem with Local Exception Handling
+
+Imagine:
+
+```
+UserController
+ProductController
+OrderController
+CustomerController
+PaymentController
+```
+
+All need:
+
+```
+UserNotFoundException
+ValidationException
+IllegalArgumentException
+Exception
+```
+
+You would write the same handlers again and again.
+
+Not maintainable.
+
+---
+
+## Global Exception Handling
+
+Instead of placing handlers in every controller, create one centralized class.
+
+Spring provides:
+
+```
+@ControllerAdvice
+```
+
+for this purpose.
+
+### Definition
+
+`@ControllerAdvice` is used to handle exceptions globally across all controllers.
+
+---
+
+## @ControllerAdvice Example
+
+### Custom Exception
+
+```
+public class UserNotFoundException extends RuntimeException {
+
+    public UserNotFoundException(String message) {
+        super(message);
+    }
+}
+```
+
+---
+
+### Global Exception Handler
+
+```
+@ControllerAdvice
+public class GlobalExceptionHandler {
+
+    @ExceptionHandler(UserNotFoundException.class)
+    public ResponseEntity<String> handleUserNotFound(
+            UserNotFoundException ex) {
+
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body(ex.getMessage());
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<String> handleException(
+            Exception ex) {
+
+        return ResponseEntity
+                .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body("Something went wrong");
+    }
+}
+```
+
+---
+
+### Controller
+
+```
+@RestController
+@RequestMapping("/users")
+public class UserController {
+
+    @GetMapping("/{id}")
+    public String getUser(@PathVariable Long id) {
+
+        throw new UserNotFoundException(
+                "User not found with id: " + id);
+    }
+}
+```
+
+---
+
+### Flow
+
+```
+Request
+   ↓
+UserController
+   ↓
+Exception Thrown
+   ↓
+@ControllerAdvice
+   ↓
+Matching @ExceptionHandler
+   ↓
+Response
+```
+
+Now every controller automatically uses this handler.
+
+---
+
+## @RestControllerAdvice
+
+Most Spring Boot REST APIs return JSON.
+
+With `@ControllerAdvice`, sometimes you need:
+
+```
+@ResponseBody
+```
+
+to convert return values into JSON.
+
+To avoid writing that, Spring provides:
+
+```
+@RestControllerAdvice
+```
+
+---
+
+### Internally
+
+```
+@RestControllerAdvice = @ControllerAdvice + @ResponseBody
+```
+
+Exactly like:
+
+```
+@RestController = @Controller + @ResponseBody
+```
+
+---
+
+### Example
+
+```
+@RestControllerAdvice
+public class GlobalExceptionHandler {
+
+    @ExceptionHandler(UserNotFoundException.class)
+    public ErrorResponse handleUserNotFound(
+            UserNotFoundException ex) {
+
+        return new ErrorResponse(
+                "USER_NOT_FOUND",
+                ex.getMessage());
+    }
+}
+```
+
+Response:
+
+```
+{
+  "code": "USER_NOT_FOUND",
+  "message": "User not found"
+}
+```
+
+Spring automatically converts object → JSON.
+
+---
+
+## Real Production Example
+
+Instead of returning String:
+
+```
+return "User not found";
+```
+
+we return structured JSON.
+
+### Error DTO
+
+```
+public class ErrorResponse {
+
+    private String code;
+    private String message;
+
+    public ErrorResponse(String code,
+                         String message) {
+        this.code = code;
+        this.message = message;
+    }
+
+    // getters setters
+}
+```
+
+---
+
+### Global Handler
+
+```
+@RestControllerAdvice
+public class GlobalExceptionHandler {
+
+    @ExceptionHandler(UserNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleUserNotFound(
+            UserNotFoundException ex) {
+
+        ErrorResponse response =
+                new ErrorResponse(
+                        "USER_NOT_FOUND",
+                        ex.getMessage());
+
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body(response);
+    }
+}
+```
+
+Response:
+
+```
+{
+  "code": "USER_NOT_FOUND",
+  "message": "User not found with id 100"
+}
+```
+
+---
+
+## Local vs Global Exception Handling
+
+|Feature|Local Exception|Global Exception|
+|---|---|---|
+|Location|Inside Controller|Separate class|
+|Annotation|`@ExceptionHandler`|`@ControllerAdvice` + `@ExceptionHandler`|
+|Scope|Single Controller|All Controllers|
+|Reusability|Low|High|
+|Maintenance|Difficult|Easy|
+|Production Usage|Rare|Very Common|
+
+---
+
+## @ControllerAdvice vs @RestControllerAdvice
+
+|Feature|@ControllerAdvice|@RestControllerAdvice|
+|---|---|---|
+|Used For|MVC + REST|REST APIs|
+|Returns View|Yes|No|
+|JSON Response|Need `@ResponseBody`|Automatic|
+|Internally|Only Advice|Advice + ResponseBody|
+|Most Common in Spring Boot APIs|No|Yes|
+
+---
+
+## Interview Answer (2–3 lines)
+
+>`@ControllerAdvice` is used for global exception handling across multiple controllers. It allows us to centralize exception-handling logic instead of writing `@ExceptionHandler` methods in every controller.
+
+>`@RestControllerAdvice` is a combination of `@ControllerAdvice` and `@ResponseBody`, so it automatically returns exception responses as JSON and is commonly used in Spring Boot REST APIs.
+
+#
+----
+----
+----
+-----
+
+# ==How do you handle validation exceptions (MethodArgumentNotValidException) ?
+
+Definition:
+
+> Exception thrown by Spring when validation on an object annotated with `@Valid` fails.
+
+Commonly occurs with:
+
+```
+@Valid @RequestBody
+```
+
+---
+
+### DTO
+
+```
+public class UserRequest {
+
+    @NotBlank(message = "Name is required")
+    private String name;
+
+    @Email(message = "Invalid email")
+    private String email;
+
+    @Min(value = 18,
+         message = "Age must be at least 18")
+    private int age;
+
+    // getters setters
+}
+```
+
+---
+
+### Controller
+
+```
+@RestController
+@RequestMapping("/users")
+public class UserController {
+
+    @PostMapping
+    public String createUser(
+            @Valid @RequestBody UserRequest request) {
+
+        return "User Created";
+    }
+}
+```
+
+---
+
+Invalid Request
+
+```
+{
+  "name": "",
+  "email": "abc",
+  "age": 10
+}
+```
+
+Spring throws:
+
+```
+MethodArgumentNotValidException
+```
+
+---
+
+## Handling MethodArgumentNotValidException
+
+Usually handled globally using:
+
+```
+@RestControllerAdvice
+```
+
+---
+
+### Global Exception Handler
+
+```
+@RestControllerAdvice
+public class GlobalExceptionHandler {
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<Map<String, String>>
+    handleValidationException(
+            MethodArgumentNotValidException ex) {
+
+        Map<String, String> errors = new HashMap<>();
+
+        ex.getBindingResult()
+          .getFieldErrors()
+          .forEach(error ->
+              errors.put(
+                  error.getField(),
+                  error.getDefaultMessage()));
+
+        return ResponseEntity
+                .badRequest()
+                .body(errors);
+    }
+}
+```
+
+---
+
+### Internal Working of Above Code
+
+Spring provides:
+
+```
+ex.getBindingResult()
+```
+
+which contains all validation errors.
+
+Example:
+
+```
+Field: name
+Message: Name is required
+
+Field: email
+Message: Invalid email
+
+Field: age
+Message: Age must be at least 18
+```
+
+---
+### Response Produced
+
+```
+{
+  "name": "Name is required",
+  "email": "Invalid email",
+  "age": "Age must be at least 18"
+}
+```
+
+Status:
+
+```
+400 Bad Request
+```
+
+---
+
+## Production-Level Response
+
+Instead of Map, companies usually return an Error DTO.
+
+```
+public class ErrorResponse {
+
+    private String message;
+    private Map<String, String> errors;
+
+    // constructor
+}
+```
+
+---
+
+Handler:
+
+```
+@ExceptionHandler(MethodArgumentNotValidException.class)
+public ResponseEntity<ErrorResponse>
+handleValidationException(
+        MethodArgumentNotValidException ex) {
+
+    Map<String,String> errors = new HashMap<>();
+
+    ex.getBindingResult()
+      .getFieldErrors()
+      .forEach(error ->
+              errors.put(
+                  error.getField(),
+                  error.getDefaultMessage()));
+
+    ErrorResponse response =
+            new ErrorResponse(
+                    "Validation Failed",
+                    errors);
+
+    return ResponseEntity
+            .badRequest()
+            .body(response);
+}
+```
+
+Response:
+
+```
+{
+  "message": "Validation Failed",
+  "errors": {
+      "name": "Name is required",
+      "email": "Invalid email",
+      "age": "Age must be at least 18"
+  }
+}
+```
+
+---
+
+## Common Interview Question
+
+### Why does Spring throw MethodArgumentNotValidException instead of calling controller method?
+
+Because validation happens **before controller execution**.
+
+Flow:
+
+```
+Request
+ ↓
+JSON → Object
+ ↓
+@Valid
+ ↓
+Validation Failed
+ ↓
+MethodArgumentNotValidException
+ ↓
+Controller method NOT executed
+```
+
+This prevents invalid data from entering business logic.
+
+---
+
+# Interview Answer (Short)
+
+>`MethodArgumentNotValidException` is thrown by Spring when validation on a request object annotated with `@Valid` fails. It occurs before the controller method executes. We typically handle it using `@ExceptionHandler(MethodArgumentNotValidException.class)` inside a `@RestControllerAdvice`, extract validation errors using `getBindingResult().getFieldErrors()`, and return a structured `400 Bad Request` response containing field-wise validation messages.
+
+
+#
+-----
+----
+----
+
+
+# ==suppose we have exception in service / repository layer / entity layer. how to handle exception in those layer.
+
+do it later...

@@ -1,0 +1,2494 @@
+
+# ==Diff between Controller and RestController? Why @ResponseBody not needed in @RestController
+
+## @Controller
+
+`@Controller` is used when you want to return a **View (HTML/JSP/Thymeleaf page)**.
+
+```
+@Controller
+public class UserController {
+
+    @GetMapping("/home")
+    public String home() {
+        return "home"; // home.jsp or home.html
+    }
+}
+```
+
+### Flow
+
+```
+Browser Request
+      |
+      v
+Controller
+      |
+      v
+Returns View Name
+      |
+      v
+View Resolver
+      |
+      v
+HTML Page
+```
+
+---
+
+## @RestController
+
+`@RestController` is used when you want to return **JSON/XML data directly**.
+
+```
+@RestController
+public class UserController {
+
+    @GetMapping("/user")
+    public User getUser() {
+        return new User(1, "Prashant");
+    }
+}
+```
+
+Response:
+
+```
+{
+  "id": 1,
+  "name": "Prashant"
+}
+```
+
+### Flow
+
+```
+Browser/Postman
+      |
+      v
+RestController
+      |
+      v
+Java Object
+      |
+      v
+Jackson
+      |
+      v
+JSON Response
+```
+
+
+---
+
+## Why @ResponseBody is not needed in @RestController?
+
+Because:
+
+```
+@RestController = @Controller + @ResponseBody
+```
+
+Internally Spring defines:
+
+```
+@Target(TYPE)
+@Retention(RUNTIME)
+@Controller
+@ResponseBody
+public @interface RestController {
+
+}
+```
+
+So whenever Spring sees:
+
+```
+@RestController
+public class UserController {
+
+}
+```
+
+it automatically behaves as:
+
+```
+@Controller
+@ResponseBody
+public class UserController {
+
+}
+```
+
+---
+
+## What does @ResponseBody do?
+
+It tells Spring:
+
+> "Don't look for a View (HTML/JSP). Whatever I return, send it directly in the HTTP response body."
+
+Example:
+
+```
+@Controller
+public class UserController {
+
+    @GetMapping("/user")
+    @ResponseBody
+    public User getUser() {
+        return new User(1, "Prashant");
+    }
+}
+```
+
+Response:
+
+```
+{
+  "id": 1,
+  "name": "Prashant"
+}
+```
+
+Without `@ResponseBody`, Spring thinks `"User"` is a view name.
+
+---
+
+## Example Without @ResponseBody
+
+```
+@Controller
+public class UserController {
+
+    @GetMapping("/hello")
+    public String hello() {
+        return "hello";
+    }
+}
+```
+
+Spring tries to find:
+
+```
+hello.jsp
+or
+hello.html
+```
+
+because it assumes you are returning a view.
+
+---
+
+## Example With @ResponseBody
+
+```
+@Controller
+public class UserController {
+
+    @GetMapping("/hello")
+    @ResponseBody
+    public String hello() {
+        return "Hello World";
+    }
+}
+```
+
+Response:
+
+```
+Hello World
+```
+
+Spring sends the string directly to the client.
+
+---
+
+## Production-Level Example
+
+### Wrong
+
+```
+@Controller
+public class ProductController {
+
+    @GetMapping("/products")
+    public List<Product> getProducts() {
+        return service.getProducts();
+    }
+}
+```
+
+Spring will try to find a view named:
+
+```
+[Product, Product]
+```
+
+and fail.
+
+---
+
+### Correct
+
+```
+@Controller
+public class ProductController {
+
+    @GetMapping("/products")
+    @ResponseBody
+    public List<Product> getProducts() {
+        return service.getProducts();
+    }
+}
+```
+
+OR
+
+```
+@RestController
+public class ProductController {
+
+    @GetMapping("/products")
+    public List<Product> getProducts() {
+        return service.getProducts();
+    }
+}
+```
+
+`@RestController` is preferred in modern Spring Boot microservices.
+
+---
+
+## Interview Answer (2 Lines)
+
+>**@Controller** is used to return web pages (views like JSP/Thymeleaf), while **@RestController** is used to build REST APIs that return JSON/XML responses.
+
+>`@ResponseBody` is not required in `@RestController` because `@RestController` is internally a combination of `@Controller` and `@ResponseBody`, so every method automatically writes its return value to the HTTP response body.
+
+
+----
+
+# ==@RequestMapping ?
+
+The `@RequestMapping` annotation in the Spring Framework maps HTTP requests to specific controller classes or handler methods. It is highly versatile and allows developers to define URL paths, HTTP methods (GET, POST, etc.), headers, and query parameters.
+All other annotations are basically shortcuts of `@RequestMapping`.
+
+```
+@GetMapping
+@PostMapping
+@PutMapping
+@DeleteMapping
+@PatchMapping
+```
+
+are specialized versions of `@RequestMapping`.
+
+---
+## Basic Syntax
+
+```
+@RequestMapping("/users")
+public class UserController {
+}
+```
+
+This means:
+
+```
+All APIs inside this controller start with /users
+```
+
+---
+
+## Class Level @RequestMapping
+
+```
+@RestController
+@RequestMapping("/users")
+public class UserController {
+
+    @GetMapping("/{id}")
+    public String getUser(@PathVariable Long id) {
+        return "User " + id;
+    }
+}
+```
+
+Generated Endpoint:
+
+```
+GET /users/101
+```
+
+Spring combines:
+
+```
+/users
++
+/{id}
+=
+/users/{id}
+```
+
+---
+
+## Method Level @RequestMapping
+
+```
+@RestController
+public class UserController {
+
+    @RequestMapping("/hello")
+    public String hello() {
+        return "Hello";
+    }
+}
+```
+
+Request:
+
+```
+GET /hello
+```
+
+Response:
+
+```
+Hello
+```
+
+---
+
+## Specify HTTP Method
+
+By default:
+
+```
+@RequestMapping("/users")
+```
+
+accepts:
+
+```
+GET
+POST
+PUT
+DELETE
+PATCH
+```
+
+all methods.
+
+==Usually not recommended.
+
+---
+
+Instead:
+
+```
+@RequestMapping(
+    value = "/users",
+    method = RequestMethod.GET
+)
+public String getUsers() {
+    return "Users";
+}
+```
+
+Only accepts:
+
+```
+GET /users
+```
+
+---
+
+## Equivalent Shortcut
+
+Instead of:
+
+```
+@RequestMapping(
+    value="/users",
+    method=RequestMethod.GET
+)
+```
+
+Use:
+
+```
+@GetMapping("/users")
+```
+
+Much cleaner.
+
+---
+
+```
+@RequestMapping(
+    value="/users",
+    method=RequestMethod.GET
+)
+```
+
+
+```
+@RequestMapping(
+    value="/users",
+    method=RequestMethod.POST
+)
+```
+
+
+```
+@RequestMapping(
+    value="/users",
+    method=RequestMethod.PUT
+)
+```
+
+## Interview Question
+
+### Why use @RequestMapping at class level?
+
+Because it avoids repeating the same base URL.
+
+Without it:
+
+```
+@GetMapping("/api/v1/users/{id}")
+@PostMapping("/api/v1/users")
+@PutMapping("/api/v1/users/{id}")
+```
+
+With it:
+
+```
+@RequestMapping("/api/v1/users")
+```
+
+```
+@GetMapping("/{id}")
+@PostMapping
+@PutMapping("/{id}")
+```
+
+Cleaner and easier to maintain.
+
+---
+
+## Interview Answer (1 Minute)
+
+>`@RequestMapping` is a generic request mapping annotation used to map URLs to controller classes or methods. It can handle all HTTP methods such as GET, POST, PUT, and DELETE by specifying the `method` attribute. In modern Spring Boot applications, we usually use `@RequestMapping` at the class level for the base path and use specialized annotations like `@GetMapping`, `@PostMapping`, `@PutMapping`, and `@DeleteMapping` at the method level for better readability.
+
+
+
+# ==@RequestParam, @PathVariable, and @RequestBody? Give implementation for each and share how you will generate endpoint and pass values.
+
+## @PathVariable
+
+Used when a value is part of the URL path.
+### Endpoint
+
+```
+GET /users/101
+```
+
+Here:
+
+```
+101
+```
+
+is part of the path.
+
+```
+@RestController
+@RequestMapping("/users")
+public class UserController {
+
+    @GetMapping("/{id}")
+    public String getUser(
+            @PathVariable Long id) {
+
+        return "User Id = " + id;
+    }
+}
+```
+
+---
+
+## @RequestParam
+
+Used when values are passed as query parameters.
+
+### Endpoint
+
+```
+GET /users?id=101
+```
+
+or
+
+```
+GET /users?page=1&size=10
+```
+
+### Implementation
+
+```
+@GetMapping("/search")
+public String searchUser(
+        @RequestParam Long id) {
+
+    return "User Id = " + id;
+}
+```
+
+---
+
+### Multiple Query Params
+
+```
+@GetMapping("/users")
+public String getUsers(
+        @RequestParam int page,
+        @RequestParam int size) {
+
+    return page + " " + size;
+}
+```
+
+Request:
+
+```
+GET /users?page=1&size=20
+```
+
+Values:
+
+```
+page = 1
+size = 20
+```
+
+---
+
+### Optional Request Param
+
+```
+@GetMapping("/users")
+public String getUsers(
+        @RequestParam(required = false)
+        String city) {
+
+    return city;
+}
+```
+
+Request:
+
+```
+GET /users
+```
+
+No error.
+
+---
+
+### Default Value
+
+```
+@GetMapping("/users")
+public String getUsers(
+        @RequestParam(defaultValue = "0")
+        int page) {
+
+    return "Page = " + page;
+}
+```
+
+Request:
+
+```
+GET /users
+```
+
+Response:
+
+```
+Page = 0
+```
+
+---
+
+## @RequestBody
+
+Used when client sends JSON data.
+
+Most common in:
+
+```
+POST
+PUT
+PATCH
+```
+
+APIs.
+
+---
+
+### DTO
+
+```
+public class UserRequest {
+
+    private String name;
+    private String email;
+
+    // getters setters
+}
+```
+
+---
+
+### Controller
+
+```
+@PostMapping("/users")
+public String createUser(
+        @RequestBody UserRequest request) {
+
+    return request.getName();
+}
+```
+
+---
+
+### Request
+
+```
+POST /users
+Content-Type: application/json
+```
+
+Body:
+
+```
+{
+  "name":"Prashant",
+  "email":"abc@gmail.com"
+}
+```
+
+Spring converts JSON into:
+
+```
+UserRequest object
+```
+
+using Jackson.
+
+---
+
+### Response
+
+```
+Prashant
+```
+
+---
+
+## Real Production Example
+
+
+```
+POST /users/101/orders?priority=HIGH
+```
+
+Body:
+
+```
+{
+  "productId": 1,
+  "quantity": 2
+}
+```
+
+---
+
+### Controller
+
+```
+@PostMapping("/users/{userId}/orders")
+public ResponseEntity<OrderResponse> createOrder(
+        @PathVariable Long userId,
+        @RequestParam String priority,
+        @RequestBody OrderRequest request) {
+
+    return ResponseEntity.ok(
+            orderService.create(
+                    userId,
+                    priority,
+                    request));
+}
+```
+
+Spring maps:
+
+```
+userId = 101
+priority = HIGH
+
+request = {
+   productId=1,
+   quantity=2
+}
+```
+
+---
+
+## Interview Answer (30 Seconds)
+
+- `@PathVariable` is used to read values from the URL path, e.g. `/users/101`.
+- `@RequestParam` is used to read query parameters, e.g. `/users?page=1&size=20`.
+- `@RequestBody` is used to read JSON/XML payload from the HTTP request body and convert it into a Java object.
+
+
+
+
+
+
+
+# ==Diff between ResponseBody and ResponseEntity?
+
+This is a very important Spring Boot interview topic.
+
+## Quick Difference
+
+|Feature|@ResponseBody|ResponseEntity|
+|---|---|---|
+|Returns response body|✅|✅|
+|Set HTTP Status Code|❌|✅|
+|Set Headers|❌|✅|
+|Full HTTP Response Control|❌|✅|
+|Production APIs|Rarely|Very Common|
+
+---
+
+## @ResponseBody
+
+Tells Spring:
+
+> "Convert my return value into JSON/XML and write it into HTTP response body."
+
+Example:
+
+```
+@Controller
+public class UserController {
+
+    @GetMapping("/user")
+    @ResponseBody
+    public User getUser() {
+        return new User(1, "Prashant");
+    }
+}
+```
+
+Response:
+
+```
+{
+  "id": 1,
+  "name": "Prashant"
+}
+```
+
+Status:
+
+```
+200 OK
+```
+
+Spring automatically sends 200.
+
+You have little control.
+
+---
+
+## ResponseEntity
+
+Represents the entire HTTP response.
+
+```
+HTTP Response
+├── Status Code
+├── Headers
+└── Body
+```
+
+ResponseEntity allows controlling all three.
+
+Example:
+
+```
+@GetMapping("/user")
+public ResponseEntity<User> getUser() {
+
+    User user = new User(1, "Prashant");
+
+    return ResponseEntity.ok(user);
+}
+```
+
+Response:
+
+```
+200 OK
+
+{
+  "id":1,
+  "name":"Prashant"
+}
+```
+
+### Why Production Teams Prefer ResponseEntity
+
+==Because APIs should return meaningful status codes.
+
+## Scenario 1: Create User API
+
+Interview Favorite
+
+### Requirement
+
+User created successfully.
+
+Return:
+
+```
+201 CREATED
+```
+
+### Solution
+
+```
+@PostMapping("/users")
+public ResponseEntity<User> createUser(
+        @RequestBody User user) {
+
+    User savedUser = service.save(user);
+
+    return ResponseEntity
+            .status(HttpStatus.CREATED)
+            .body(savedUser);
+}
+```
+
+Response:
+
+```
+201 CREATED
+```
+
+---
+
+## Scenario 2: Delete User
+
+```
+@DeleteMapping("/users/{id}")
+public ResponseEntity<Void> deleteUser(
+        @PathVariable Long id) {
+
+    service.delete(id);
+
+    return ResponseEntity.noContent().build();
+}
+```
+
+Response:
+
+```
+204 NO CONTENT
+```
+
+No response body needed.
+
+Production standard.
+
+---
+
+## Scenario 3: Validation Failure
+
+```
+@PostMapping("/users")
+public ResponseEntity<String> createUser(
+        @RequestBody User user) {
+
+    if(user.getEmail() == null){
+        return ResponseEntity
+                .badRequest()
+                .body("Email is required");
+    }
+
+    return ResponseEntity.ok("User Created");
+}
+```
+
+Response:
+
+```
+400 BAD REQUEST
+```
+
+---
+
+## Scenario 4: Return Custom Header
+
+Suppose after login we send JWT token.
+
+```
+@PostMapping("/login")
+public ResponseEntity<String> login() {
+
+    return ResponseEntity
+            .ok()
+            .header("Authorization",
+                    "Bearer JWT_TOKEN")
+            .body("Login Success");
+}
+```
+
+Response:
+
+```
+200 OKAuthorization: Bearer JWT_TOKEN
+```
+
+Very common.
+
+---
+
+## Scenario 5: File Download
+
+```
+@GetMapping("/report")
+public ResponseEntity<byte[]> download() {
+
+    byte[] file = reportService.generate();
+
+    return ResponseEntity.ok()
+            .header(
+                HttpHeaders.CONTENT_DISPOSITION,
+                "attachment; filename=report.pdf")
+            .body(file);
+}
+```
+
+Used everywhere.
+
+---
+
+## Real Production Example
+
+Imagine an Order Service.
+
+### Create Order
+
+```
+@PostMapping("/orders")
+public ResponseEntity<OrderResponse> createOrder(
+        @RequestBody CreateOrderRequest request) {
+
+    OrderResponse response =
+            orderService.create(request);
+
+    return ResponseEntity
+            .status(HttpStatus.CREATED)
+            .body(response);
+}
+```
+
+---
+
+### Get Order
+
+```
+@GetMapping("/orders/{id}")
+public ResponseEntity<OrderResponse> getOrder(
+        @PathVariable Long id) {
+
+    OrderResponse order =
+            orderService.findById(id);
+
+    if(order == null){
+        return ResponseEntity.notFound().build();
+    }
+
+    return ResponseEntity.ok(order);
+}
+```
+
+---
+
+### Cancel Order
+
+```
+@DeleteMapping("/orders/{id}")
+public ResponseEntity<Void> cancelOrder(
+        @PathVariable Long id) {
+
+    orderService.cancel(id);
+
+    return ResponseEntity.noContent().build();
+}
+```
+
+This is how most Spring Boot microservices are written.
+
+---
+
+## Interview Question
+
+### Can we use both together?
+
+Yes.
+
+```
+@ResponseBody
+public ResponseEntity<User> getUser() {
+    return ResponseEntity.ok(user);
+}
+```
+
+But unnecessary.
+
+Because: @RestController already adds `@ResponseBody` and `ResponseEntity` already contains the response body.
+
+- 200 OK
+- 201 CREATED
+- 204 NO CONTENT
+- 400 BAD REQUEST
+- 401 UNAUTHORIZED
+- 403 FORBIDDEN
+- 404 NOT FOUND
+- 409 CONFLICT
+- 500 INTERNAL SERVER ERROR
+
+
+
+# ==Various REST methods like GET, PUT, POST, PATCH, OPTIONS,  DELETE? Which are idempotent?
+
+## REST Methods and Idempotency
+
+**Idempotent** means:
+
+> Calling the same API multiple times produces the same final result on the server.
+
+Example:
+
+```
+PUT /users/1
+{
+   "name": "Prashant"
+}
+```
+
+Call it 1 time or 100 times → user name remains "Prashant".
+
+So PUT is idempotent.
+
+---
+
+## GET
+
+Used to fetch data.
+
+```
+GET /users/1
+```
+
+Response:
+
+```
+{
+  "id":1,
+  "name":"Prashant"
+}
+```
+
+### Idempotent?
+
+✅ Yes
+
+Calling GET 100 times does not change data.
+
+---
+
+## POST
+
+Used to create resource.
+
+```
+POST /users
+{
+  "name":"Prashant"
+}
+```
+
+### First call
+
+Creates:
+
+```
+{
+  "id":101,
+  "name":"Prashant"
+}
+```
+
+### Second call
+
+Creates another user:
+
+```
+{
+  "id":102,
+  "name":"Prashant"
+}
+```
+
+### Idempotent?
+
+❌ No
+
+Every request creates new resource.
+
+---
+
+## PUT
+
+Used for full update or create-if-not-exists.
+
+```
+PUT /users/1
+{
+   "name":"Rahul",
+   "city":"Delhi"
+}
+```
+
+Existing data:
+
+```
+{
+  "name":"Prashant",
+  "city":"Noida"
+}
+```
+
+After PUT:
+
+```
+{
+  "name":"Rahul",
+  "city":"Delhi"
+}
+```
+
+Whole object replaced.
+
+### Idempotent?
+
+✅ Yes
+
+Same request multiple times → same final state.
+
+---
+
+## PATCH
+
+Used for partial update.
+
+```
+PATCH /users/1
+{
+   "city":"Mumbai"
+}
+```
+
+Only city changes.
+
+### Idempotent?
+
+Usually ✅ Yes
+
+Example:
+
+```
+PATCH /users/1
+{
+   "city":"Mumbai"
+}
+```
+
+Run 100 times → city still Mumbai.
+
+But PATCH **can be non-idempotent**.
+
+Example:
+
+```
+PATCH /users/1
+{
+   "salary": "+1000"
+}
+```
+
+Every call increases salary.
+
+So PATCH is:
+
+⚠️ Not guaranteed idempotent.
+
+Interview answer:
+
+> PATCH is generally considered idempotent when setting values, but it can be non-idempotent depending on implementation.
+
+---
+
+## DELETE
+
+```
+DELETE /users/1
+```
+
+First call:
+
+```
+User deleted
+```
+
+Second call:
+
+```
+User already deleted
+```
+
+Final state remains:
+
+```
+User does not exist
+```
+
+### Idempotent?
+
+✅ Yes
+
+---
+
+## OPTIONS
+
+Used to ask server:
+
+> Which methods are allowed?
+
+```
+OPTIONS /users
+```
+
+Response:
+
+```
+Allow: GET,POST,PUT,DELETE
+```
+
+### Idempotent?
+
+✅ Yes
+
+No data modification.
+
+---
+
+## HEAD
+
+Same as GET but only headers.
+
+```
+HEAD /users/1
+```
+
+### Idempotent?
+
+✅ Yes
+
+---
+
+## Interview Table
+
+| Method  | Purpose           | Idempotent     |
+| ------- | ----------------- | -------------- |
+| GET     | Read Data         | ✅ Yes          |
+| POST    | Create Resource   | ❌ No           |
+| PUT     | Full Update       | ✅ Yes          |
+| PATCH   | Partial Update    | ⚠️ Usually Yes |
+| DELETE  | Delete Resource   | ✅ Yes          |
+| OPTIONS | Supported Methods | ✅ Yes          |
+| HEAD    | Headers Only      | ✅ Yes          |
+
+
+
+# ==How does Spring Boot auto-configure Jackson for JSON serialization / deserialization ?
+
+## What is Jackson?
+
+Jackson is a Java library used to convert:
+
+### Java Object → JSON
+
+(Serialization)
+
+```
+User user = new User(1, "Prashant");
+```
+
+becomes
+
+```
+{
+  "id": 1,
+  "name": "Prashant"
+}
+```
+
+---
+
+### JSON → Java Object
+
+(Deserialization)
+
+```
+{
+  "id": 1,
+  "name": "Prashant"
+}
+```
+
+becomes
+
+```
+User user = new User(1, "Prashant");
+```
+
+---
+
+## How Spring Boot Knows Jackson Exists?
+
+When you add:
+
+```
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-web</artifactId>
+</dependency>
+```
+
+Spring Boot automatically brings:
+
+```
+spring-boot-starter-web
+    |
+    ├── spring-web
+    ├── spring-webmvc
+    └── jackson-databind
+```
+
+So Jackson gets added automatically.
+
+You never explicitly add:
+
+```
+jackson-databind
+```
+
+in most projects.
+
+---
+
+## Auto Configuration Flow
+
+When application starts:
+
+```
+@SpringBootApplication
+```
+
+internally contains:
+
+```
+@EnableAutoConfiguration
+```
+
+This triggers Spring Boot's auto-configuration mechanism.
+
+Spring Boot checks:
+
+```
+Is Jackson library present?
+```
+
+If YES:
+
+```
+JacksonAutoConfiguration
+```
+
+gets activated.
+
+---
+
+Internally:
+
+```
+@AutoConfiguration
+public class JacksonAutoConfiguration {}
+```
+
+creates: `ObjectMapper Bean`
+
+## What is ObjectMapper?
+
+ObjectMapper is Jackson's main engine.
+
+```
+ObjectMapper mapper = new ObjectMapper();
+```
+
+Serialization:
+
+```
+String json = mapper.writeValueAsString(user);
+```
+
+Output:
+
+```
+{
+  "id":1,
+  "name":"Prashant"
+}
+```
+
+---
+
+Deserialization:
+
+```
+User user = mapper.readValue(json, User.class);
+```
+
+Output:
+
+```
+User(1, "Prashant")
+```
+
+---
+
+## Internal Request Flow (Deserialization)
+
+Request:
+
+```
+POST /users
+```
+
+Body:
+
+```
+{
+  "id":1,
+  "name":"Prashant"
+}
+```
+
+---
+
+Step 1
+
+Request reaches:
+
+```
+DispatcherServlet
+```
+
+---
+
+Step 2
+
+Find controller method
+
+```
+@PostMapping
+public User createUser(
+        @RequestBody User user)
+```
+
+---
+
+Step 3
+
+Spring sees:
+
+```
+@RequestBody
+```
+
+and says:
+
+```
+I need to convert JSON into Java Object
+```
+
+---
+
+Step 4
+
+Uses:
+
+```
+HttpMessageConverter
+```
+
+Specifically:
+
+```
+MappingJackson2HttpMessageConverter
+```
+
+---
+
+Step 5
+
+Converter uses:
+
+```
+ObjectMapper.readValue()
+```
+
+Internally:
+
+```
+User user = mapper.readValue(json, User.class);
+```
+
+---
+
+Now controller gets:
+
+```
+User user
+```
+
+fully populated.
+
+---
+
+# Flow Diagram
+
+```
+JSON Request
+     |
+     v
+DispatcherServlet
+     |
+     v
+@RequestBody
+     |
+     v
+MappingJackson2HttpMessageConverter
+     |
+     v
+ObjectMapper.readValue()
+     |
+     v
+User Object
+```
+
+---
+
+## Internal Response Flow (Serialization)
+
+Controller:
+
+```
+@GetMapping("/{id}")
+public User getUser() {
+    return new User(1, "Prashant");
+}
+```
+
+---
+
+Controller returns:
+
+```
+User Object
+```
+
+---
+
+Spring sees:
+
+```
+@RestController
+```
+
+which implies:
+
+```
+@ResponseBody
+```
+
+---
+
+Spring says:
+
+```
+Need to convert User object to JSON
+```
+
+---
+
+Uses:
+
+```
+MappingJackson2HttpMessageConverter
+```
+
+---
+
+Internally:
+
+```
+mapper.writeValueAsString(user);
+```
+
+---
+
+Response:
+
+```
+{
+  "id":1,
+  "name":"Prashant"
+}
+```
+
+---
+
+Flow:
+
+```
+User Object
+      |
+      v
+@ResponseBody
+      |
+      v
+MappingJackson2HttpMessageConverter
+      |
+      v
+ObjectMapper.writeValueAsString()
+      |
+      v
+JSON Response
+```
+
+---
+
+## Why MappingJackson2HttpMessageConverter?
+
+Spring supports multiple formats:
+
+### JSON
+
+```
+MappingJackson2HttpMessageConverter
+```
+
+---
+
+### XML
+
+```
+MappingJackson2XmlHttpMessageConverter
+```
+
+---
+
+### String
+
+```
+StringHttpMessageConverter
+```
+
+---
+
+### Byte Array
+
+```
+ByteArrayHttpMessageConverter
+```
+
+---
+
+Spring selects converter based on:
+
+```
+Content-TypeAccept
+```
+
+headers.
+
+---
+
+Example:
+
+```
+Content-Type: application/json
+```
+
+Spring chooses:
+
+```
+MappingJackson2HttpMessageConverter
+```
+
+
+---
+
+# Interview Answer (2-Minute Version)
+
+> Spring Boot auto-configures Jackson through `JacksonAutoConfiguration`, which is triggered by `@EnableAutoConfiguration` when `jackson-databind` is present on the classpath. It creates and configures an `ObjectMapper` bean automatically. During request processing, Spring MVC uses `MappingJackson2HttpMessageConverter` to deserialize JSON request bodies into Java objects using `ObjectMapper.readValue()`. For responses, the same converter serializes Java objects into JSON using `ObjectMapper.writeValueAsString()`. Developers can customize serialization and deserialization behavior using Jackson annotations such as `@JsonProperty`, `@JsonIgnore`, `@JsonFormat`, or by customizing the `ObjectMapper` bean globally.
+
+#
+---
+---
+---
+---
+---
+
+
+# ==Explain the lifecycle of a REST request in Spring Boot (DispatcherServlet - > HandlerMapping -> Controller -> ViewResolver).
+
+This is one of the **most important Spring Boot interview questions**.
+
+Most developers memorize:
+
+```
+Client
+  ↓
+DispatcherServlet
+  ↓
+HandlerMapping
+  ↓
+Controller
+  ↓
+ViewResolver
+  ↓
+Response
+```
+
+---
+## Big Picture
+
+Suppose a user opens:
+
+```
+GET /products/101
+```
+
+Browser sends request to your Spring Boot application.
+
+Question:
+
+**Who receives this request first?**
+
+Not Controller.
+
+The request first reaches:
+
+```
+DispatcherServlet
+```
+
+---
+
+## Why Do We Need DispatcherServlet?
+
+Imagine a large e-commerce application.
+
+```
+100 Controllers
+
+ProductController
+OrderController
+UserController
+PaymentController
+CartController
+ReviewController
+...
+```
+
+Without DispatcherServlet:
+
+```
+Request arrives
+
+How will Spring know:
+
+/products → ProductController
+
+/orders → OrderController
+
+/users → UserController
+```
+
+Every controller would need to check every request.
+
+Huge mess.
+
+---
+
+Therefore Spring introduces:
+
+```
+DispatcherServlet acts as Front Controller
+```
+
+Every request first comes here.
+
+---
+
+## Real Life Example
+
+Imagine airport security.
+
+Passengers don't directly enter planes.
+
+They first go through:
+
+```
+Security Checkpoint
+```
+
+which decides:
+
+```
+Flight A → Gate 10
+
+Flight B → Gate 20
+
+Flight C → Gate 30
+```
+
+DispatcherServlet is that checkpoint.
+
+---
+
+## Step 1: Request Hits DispatcherServlet
+
+User:
+
+```
+GET /products/101
+```
+
+Spring Boot embedded Tomcat receives request.
+
+Tomcat forwards request to:
+
+```
+DispatcherServlet
+```
+
+---
+
+Flow:
+
+```
+Browser
+   ↓
+Tomcat
+   ↓
+DispatcherServlet
+```
+
+---
+
+### What Does DispatcherServlet Do?
+
+It asks:
+
+```
+Which Controller should handle this URL?
+```
+
+But DispatcherServlet itself doesn't know.
+
+So it asks:
+
+```
+HandlerMapping
+```
+
+---
+
+### Why Do We Need HandlerMapping?
+
+Imagine:
+
+```
+@GetMapping("/products/{id}")
+public Product getProduct()
+```
+
+and
+
+```
+@GetMapping("/orders/{id}")
+public Order getOrder()
+```
+
+Spring needs a `lookup table`.
+
+Something like:
+
+```
+/products/* → ProductController.getProduct()
+
+/orders/* → OrderController.getOrder()
+```
+
+Who maintains this mapping?
+
+```
+HandlerMapping
+```
+
+---
+
+### HandlerMapping Job
+
+`a core component that links incoming HTTP requests to the specific piece of code meant to process them`.
+
+Simply:
+
+```
+URL → Controller Method
+```
+
+**Mapping**.
+
+---
+
+Flow:
+
+```
+DispatcherServlet
+        ↓
+HandlerMapping
+        ↓
+ProductController.getProduct()
+```
+
+---
+
+## Step 3: Controller Execution
+
+Now DispatcherServlet knows:
+
+```
+Which method should execute
+```
+
+It calls:
+
+```
+ProductController.getProduct()
+```
+
+---
+
+Controller's responsibility:
+
+```
+Receive request
+
+Call Service Layer
+
+Return result
+```
+
+Example:
+
+```
+@GetMapping("/products/{id}")
+public Product getProduct(
+      @PathVariable Long id) {
+
+    return productService.getProduct(id);
+}
+```
+
+---
+
+Controller should NOT:
+
+❌ Write SQL
+
+❌ Talk to DB directly
+
+❌ Contain business logic
+
+---
+
+Controller acts as:
+
+```
+Translator
+```
+
+between HTTP world and Java world.
+
+---
+
+## Controller Calls Service
+
+```
+Product product = productService.getProduct(id);
+```
+
+Service:
+
+```
+Product product = productRepository.findById(id);
+```
+
+Database returns:
+
+```
+Product
+```
+
+---
+
+Controller returns:
+
+```
+return product;
+```
+
+---
+
+Now DispatcherServlet gets:
+
+```
+Product Object
+```
+
+---
+
+Question: **Can browser understand Java object?**
+
+No.
+
+Browser understands:
+
+```
+HTML
+JSON
+XML
+```
+
+not Java Objects.
+
+---
+
+Now DispatcherServlet must convert response.
+
+---
+
+## Two Different Cases
+
+Spring MVC originally designed for:
+
+```
+HTML Pages
+```
+
+Modern Spring Boot mostly serves:
+
+```
+REST APIs
+```
+
+Therefore response flow differs.
+
+---
+
+### CASE 1: Traditional Spring MVC
+
+Controller:
+
+```
+@GetMapping("/home")
+public String home() {
+    return "home";
+}
+```
+
+Returns:
+
+```
+"home"
+```
+
+Not HTML.
+
+Just view name.
+
+---
+
+DispatcherServlet asks:
+
+```
+Where is home page?
+```
+
+Who answers?
+
+```
+ViewResolver
+```
+
+---
+
+### Why Do We Need ViewResolver?
+
+A **ViewResolver** in Spring MVC is a helpful tool that turns a simple text name (like `"home"`) into an actual web page file (like `/WEB-INF/views/home.jsp`)
+
+Suppose:
+
+```
+return "home";
+```
+
+means:
+
+```
+/templates/home.html
+```
+
+or
+
+```
+/WEB-INF/jsp/home.jsp
+```
+
+How will Spring know?
+
+`ViewResolver resolves it`.
+
+---
+
+Example
+
+Controller returns:
+
+```
+return "home";
+```
+
+ViewResolver converts:
+
+```
+home
+   ↓
+templates/home.html
+```
+
+---
+
+Then HTML page is rendered.
+
+---
+
+Flow
+
+```
+Controller
+    ↓
+home
+    ↓
+ViewResolver
+    ↓
+home.html
+    ↓
+HTML Response
+```
+
+---
+
+### CASE 2: REST API (Most Important)
+
+In Spring Boot APIs:
+
+```
+@RestController
+```
+
+is used.
+
+Example:
+
+```
+@GetMapping("/products/101")
+public Product getProduct() {
+    return product;
+}
+```
+
+Controller returns:
+
+```
+Product Object
+```
+
+not view name.
+
+---
+
+Now ViewResolver is NOT used.
+
+Instead:
+
+```
+HttpMessageConverter
+```
+
+
+An **`HttpMessageConverter`** is ==a strategy interface in the Spring Framework responsible for **converting HTTP request payloads into Java objects** (deserialization) and **converting Java objects back into HTTP response payloads** (serialization)==.
+
+Specifically:
+
+```
+MappingJackson2HttpMessageConverter
+```
+
+---
+
+This converter uses:
+
+```
+Jackson ObjectMapper
+```
+
+to convert:
+
+```
+Product
+```
+
+into
+
+```
+{
+  "id":101,
+  "name":"iPhone"
+}
+```
+
+---
+
+Flow
+
+```
+Controller
+      ↓
+Product Object
+      ↓
+HttpMessageConverter
+      ↓
+Jackson
+      ↓
+JSON
+      ↓
+Browser
+```
+
+---
+
+## Complete REST Request Lifecycle
+
+Let's combine everything.
+
+Request:
+
+```
+GET /products/101
+```
+
+---
+
+### Step 1
+
+Tomcat receives request
+
+```
+Browser
+   ↓
+Tomcat
+```
+
+---
+
+### Step 2
+
+Tomcat forwards to
+
+```
+DispatcherServlet
+```
+
+---
+
+### Step 3
+
+DispatcherServlet asks:
+
+```
+Which controller handles this?
+```
+
+---
+
+### Step 4
+
+HandlerMapping searches mappings
+
+```
+/products/{id}
+      ↓
+ProductController.getProduct()
+```
+
+---
+
+### Step 5
+
+Controller executes
+
+```
+Product product = service.getProduct(id);
+```
+
+---
+
+### Step 6
+
+Controller returns Product
+
+```
+return product;
+```
+
+---
+
+### Step 7
+
+DispatcherServlet gets Product object
+
+---
+
+### Step 8
+
+HttpMessageConverter converts Product → JSON
+
+Using Jackson.
+
+---
+
+### Step 9
+
+JSON returned to client
+
+```
+{
+  "id":101,
+  "name":"iPhone"
+}
+```
+
+---
+
+# Final Interview Diagram
+
+```
+CLIENT
+  |
+  v
+TOMCAT
+  |
+  v
+DispatcherServlet
+  |
+  v
+HandlerMapping
+  |
+  v
+Controller
+  |
+  v
+Service
+  |
+  v
+Repository
+  |
+  v
+Database
+  |
+  ^
+  |
+Controller
+  |
+  v
+HttpMessageConverter
+(Jackson)
+  |
+  v
+JSON Response
+  |
+  v
+CLIENT
+```
+
+---
+
+## Interview Answer (Short Version)
+
+>**DispatcherServlet** is Spring MVC's Front Controller. Every request first reaches it. It coordinates the entire request lifecycle.
+
+>**HandlerMapping** maps the incoming URL to the correct controller method.
+
+>**Controller** processes the request, calls the service layer, and returns data or a view name.
+
+>**ViewResolver** is used in traditional Spring MVC applications to convert a logical view name like `"home"` into an actual view such as `home.html` or `home.jsp`.
+
+>In modern Spring Boot REST APIs, ViewResolver is usually skipped. Instead, the returned Java object is converted into JSON by `MappingJackson2HttpMessageConverter` using Jackson, and the JSON is sent back to the client.
+
+>**One interview tip:** When discussing Spring Boot REST APIs, mention that **ViewResolver is generally not involved; Jackson + HttpMessageConverter handle the response serialization.** This is a point many candidates miss.
